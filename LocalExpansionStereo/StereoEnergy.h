@@ -26,12 +26,12 @@ struct Parameters
 
 	Parameters(float lambda = 20, int windR = 20, std::string filterName = "BF", float filter_param1 = 10)
 		: alpha(0.9f)
-		, omega(10.0f)
+		, omega(10.0f)  // gamma in Eq.(11) in TPAMI paper
 		, th_grad(2.0f)
 		, th_col(10.0f)
 		, lambda(lambda)
 		, th_smooth(1.0f)
-		, epsilon(0.01f)
+		, epsilon(0.01f)  // epsilon in Eq.(10) in TPAMI paper
 		, windR(windR)
 		, neighborNum(8)
 		, filterName(filterName)

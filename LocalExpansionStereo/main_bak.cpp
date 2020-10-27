@@ -10,22 +10,16 @@
 #include "CostVolumeEnergy.h"
 #include "Utilities.hpp"
 #include <direct.h>
-#include <opencv2/stereo.hpp>
-#include <cstring>
-#include <cstdio>
-#include <algorithm>
-#include <iostream>
-#include <chrono> 
-using namespace std;
-using namespace cv;
+
 struct Options
 {
-	std::string mode = ""; // "MiddV2" or "Census"
+	std::string mode = ""; // "MiddV2" or "MiddV3"
 	std::string outputDir = "";
 	std::string targetDir = "";
+
 	int iterations = 5;
 	int pmIterations = 2;
-	bool doDual = false;  // two view cross check
+	bool doDual = false;
 
 	int ndisp = 0;
 	float smooth_weight = 1.0;
@@ -33,15 +27,16 @@ struct Options
 	int filterRadious = 20;
 
 	int threadNum = -1;
+
 	void loadOptionValues(ArgsParser& argParser)
 	{
 		argParser.TryGetArgment("outputDir", outputDir);
 		argParser.TryGetArgment("targetDir", targetDir);
 		argParser.TryGetArgment("mode", mode);
-		printf("%s () %s () %s ==================\n", outputDir, targetDir, mode);
+
 		if (mode == "MiddV2")
 			smooth_weight = 1.0;
-		else if (mode == "Census")
+		else if (mode == "MiddV3")
 			smooth_weight = 0.5;
 
 		argParser.TryGetArgment("threadNum", threadNum);
@@ -77,7 +72,7 @@ struct Options
 const Parameters paramsBF = Parameters(20, 20, "BF", 10);
 const Parameters paramsGF = Parameters(1.0f, 20, "GF", 0.0001f);
 const Parameters paramsGFfloat = Parameters(1.0f, 20, "GFfloat", 0.0001f); // Slightly faster
-uint8_t num1[65536];
+
 struct Calib
 {
 	float cam0[3][3];
@@ -155,29 +150,29 @@ void fillOutOfView(cv::Mat& volume, int mode, int margin = 0)
 	int W = volume.size.p[2];
 
 	if (mode == 0)
-		for (int d = 0; d < D; d++)
-			for (int y = 0; y < H; y++)
-			{
-				auto p = volume.ptr<float>(d, y);
-				auto q = p + d + margin;
-				float v = *q;
-				while (p != q) {
-					*p = v;
-					p++;
-				}
-			}
+	for (int d = 0; d < D; d++)
+	for (int y = 0; y < H; y++)
+	{
+		auto p = volume.ptr<float>(d, y);
+		auto q = p + d + margin;
+		float v = *q;
+		while (p != q){
+			*p = v;
+			p++;
+		}
+	}
 	else
-		for (int d = 0; d < D; d++)
-			for (int y = 0; y < H; y++)
-			{
-				auto q = volume.ptr<float>(d, y) + W;
-				auto p = q - d - margin;
-				float v = p[-1];
-				while (p != q) {
-					*p = v;
-					p++;
-				}
-			}
+	for (int d = 0; d < D; d++)
+	for (int y = 0; y < H; y++)
+	{
+		auto q = volume.ptr<float>(d, y) + W;
+		auto p = q - d - margin;
+		float v = p[-1];
+		while (p != q){
+			*p = v;
+			p++;
+		}
+	}
 }
 
 cv::Mat convertVolumeL2R(cv::Mat& volSrc, int margin = 0)
@@ -189,8 +184,8 @@ cv::Mat convertVolumeL2R(cv::Mat& volSrc, int margin = 0)
 
 	for (int d = 0; d < D; d++)
 	{
-		cv::Mat_<float> s0(H, W, volSrc.ptr<float>() + H * W*d);
-		cv::Mat_<float> s1(H, W, volDst.ptr<float>() + H * W*d);
+		cv::Mat_<float> s0(H, W, volSrc.ptr<float>() + H*W*d);
+		cv::Mat_<float> s1(H, W, volDst.ptr<float>() + H*W*d);
 		s0(cv::Rect(d, 0, W - d, H)).copyTo(s1(cv::Rect(0, 0, W - d, H)));
 
 		cv::Mat edge1 = s0(cv::Rect(W - 1 - margin, 0, 1, H)).clone();
@@ -203,26 +198,104 @@ cv::Mat convertVolumeL2R(cv::Mat& volSrc, int margin = 0)
 	return volDst;
 }
 
+bool loadData(const std::string inputDir, cv::Mat& im0, cv::Mat& im1, cv::Mat& dispGT, cv::Mat& nonocc, Calib& calib)
+{
+	if (calib.ndisp <= 0)
+		printf("Try to retrieve ndisp from files [info.txt, calib.txt].\n");
+	FILE *fp = fopen((inputDir + "info.txt").c_str(), "r");
+	if (fp != nullptr) {
+		int gt_scale;
+		int ndisp;
+		fscanf(fp, "%d", &gt_scale); // Scaling factor of intensity to disparity for ground truth
+		fscanf(fp, "%d", &ndisp);
+		fclose(fp);
+		calib.gt_prec = 1.0f / gt_scale;
+		if(calib.ndisp <= 0) calib.ndisp = ndisp;
+	}
+	else
+	{
+		int ndisp = calib.ndisp;
+		calib = Calib(inputDir + "calib.txt");
+		if (ndisp > 0) calib.ndisp = ndisp;
+	}
+	if (calib.ndisp <= 0)
+	{
+		printf("ndisp is not speficied.\n");
+		return false;
+	}
+
+
+	im0 = cv::imread(inputDir + "imL.png");
+	im1 = cv::imread(inputDir + "imR.png");
+	if (im0.empty() || im1.empty())
+	{
+		im0 = cv::imread(inputDir + "im0.png");
+		im1 = cv::imread(inputDir + "im1.png");
+
+		if (im0.empty() || im1.empty())
+		{
+			printf("Image pairs (im0.png, im1.png) or (imL.png, imR.png) not found in\n");
+			printf("%s\n", inputDir.c_str());
+			return false;
+		}
+	}
+
+	dispGT = cv::imread(inputDir + "groundtruth.png", cv::IMREAD_GRAYSCALE);
+	if (!dispGT.empty())
+	{
+		if(calib.gt_prec > 0)
+			dispGT.convertTo(dispGT, CV_32F, calib.gt_prec);
+		dispGT.setTo(cv::Scalar(INFINITY), dispGT == 0);
+	}
+	else
+	{
+		dispGT = cvutils::io::read_pfm_file(inputDir + "disp0GT.pfm");
+	}
+	if (dispGT.empty())
+		dispGT = cv::Mat_<float>::zeros(im0.size());
+
+
+	nonocc = cv::imread(inputDir + "nonocc.png", cv::IMREAD_GRAYSCALE);
+	if(nonocc.empty())
+		nonocc = cv::imread(inputDir + "mask0nocc.png", cv::IMREAD_GRAYSCALE);
+
+	if (!nonocc.empty()) 
+		nonocc = nonocc == 255;
+	else
+		nonocc = cv::Mat_<uchar>(im0.size(), 255);
+
+	return true;
+}
 
 void MidV2(const std::string inputDir, const std::string outputDir, const Options& options)
 {
 	cv::Mat imL, imR, dispGT, nonocc;
-	imL = imread(inputDir + "/img_0.png", IMREAD_COLOR);
-	imR = imread(inputDir + "/img_1.png", IMREAD_COLOR);
+	Calib calib;
+
+	calib.ndisp = options.ndisp; // ndisp of argument option has higher priority
+	if (loadData(inputDir, imL, imR, dispGT, nonocc, calib) == false)
+		return;
+	printf("ndisp = %d\n", calib.ndisp);
 
 	float errorThresh = 0.5f;
 	float vdisp = 0; // Purtubation of vertical displacement in the range of [-vdisp, vdisp]
-	float maxdisp = (float)options.ndisp - 1;
+	float maxdisp = (float)calib.ndisp - 1;
 
 	Parameters param = paramsGF;
 	param.windR = options.filterRadious;
 	param.lambda = options.smooth_weight;
 
 	{
-		_mkdir((outputDir + "midv2_debug").c_str());
-		auto tic = std::chrono::high_resolution_clock::now();
+		_mkdir((outputDir + "debug").c_str());
+
+		Evaluator *eval = new Evaluator(dispGT, nonocc, 255.0f / (maxdisp), "result", outputDir + "debug\\");
+		eval->setPrecision(calib.gt_prec);
+		eval->showProgress = false;
+		eval->setErrorThreshold(errorThresh);
+
 		FastGCStereo stereo(imL, imR, param, maxdisp, 0, vdisp);
-		stereo.saveDir = outputDir + "midv2_debug\\";
+		stereo.saveDir = outputDir + "debug\\";
+		stereo.setEvaluator(eval);
 
 		IProposer* prop1 = new ExpansionProposer(1);
 		IProposer* prop2 = new RandomProposer(7, maxdisp);
@@ -243,114 +316,77 @@ void MidV2(const std::string inputDir, const std::string outputDir, const Option
 		delete prop3;
 		delete prop4;
 
-		auto toc = std::chrono::high_resolution_clock::now();
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(toc - tic);
-
-		cvutils::io::save_pfm_file(outputDir + "disp_midv2.pfm", stereo.getEnergyInstance().computeDisparities(labeling));
+		cvutils::io::save_pfm_file(outputDir + "disp0.pfm", stereo.getEnergyInstance().computeDisparities(labeling));
 		if (options.doDual)
-			cvutils::io::save_pfm_file(outputDir + "disp_midv2_dual.pfm", stereo.getEnergyInstance().computeDisparities(rawdisp));
+			cvutils::io::save_pfm_file(outputDir + "disp0raw.pfm", stereo.getEnergyInstance().computeDisparities(rawdisp));
 
 		{
-			FILE *fp = fopen((outputDir + "midv2_time.txt").c_str(), "w");
-			if (fp != nullptr)
-			{ 
-				fprintf(fp, "%d ms\n", duration.count());
-				fclose(fp);
-			}
+			FILE *fp = fopen((outputDir + "time.txt").c_str(), "w");
+			if (fp != nullptr) { fprintf(fp, "%lf\n", eval->getCurrentTime()); fclose(fp); }
 		}
+		delete eval;
 	}
 }
 
-void censusTransform(const cv::Mat& imgL, const cv::Mat& imgR, int kernel_size, cv::Mat& censusL, cv::Mat& censusR, int R, int C)
+void MidV3(const std::string inputDir, const std::string outputDir, const Options& options)
 {
-	int hk = kernel_size / 2;
-	for (int r = 0; r < R; r++) {
-		for (int c = 0; c < C; c++) {
-			auto a = imgL.at<uchar>(r, c);
-			auto b = imgR.at<uchar>(r, c);
-			uint tr, tc, x = 0, y = 0, cnt = 0, bit = 0;
-			for (int rr = -hk; rr <= hk; rr++) {
-				for (int cc = -hk; cc <= hk; cc++) {
-					tr = std::max(0, std::min(r + rr, R - 1));
-					tc = std::max(0, std::min(c + cc, C - 1));
-					x = x << 1 | (a <= imgL.at<uchar>(tr, tc));
-					y = y << 1 | (b <= imgR.at<uchar>(tr, tc));
-					cnt++;
-					if (cnt % 32 == 31) {
-						censusL.at<cv::Vec4i>(r, c)[bit] = x;
-						censusR.at<cv::Vec4i>(r, c)[bit] = y;
-						cnt = 0;
-						x = 0;
-						y = 0;
-						bit++;
-					}
+	cv::Mat imL, imR, dispGT, nonocc;
+	Calib calib;
 
-				}
-			}
-		}
-	}
-}
+	calib.ndisp = options.ndisp; // ndisp of argument option has higher priority
+	if (loadData(inputDir, imL, imR, dispGT, nonocc, calib) == false)
+		return;
+	printf("ndisp = %d\n", calib.ndisp);
 
-float getDis(uint x) {
-	return num1[x >> 16] + num1[x & 65535];
-}
-
-float getDis(cv::Vec4i a, cv::Vec4i b) {
-	float t = 0;
-	for (int i = 0; i < 4; i++) {
-		t += getDis(a[i] ^ b[i]);
-	}
-	return t / 121;
-}
-void build_cost_volume(const cv::Mat& dispL, const cv::Mat& dispR, cv::Mat& volL, cv::Mat& volR, int D, int R, int C) {
-
-	for (int d = 0; d < D; d++) {
-		for (int r = 0; r < R; r++) {
-			for (int c = 0; c < C; c++) {
-				int l2r = std::max(0, c - d), r2l = std::min(C - 1, c + d);
-				volL.at<float>(d, r, c) = getDis(dispL.at<cv::Vec4i>(r, c), dispR.at<cv::Vec4i>(r, l2r));
-				volR.at<float>(d, r, c) = getDis(dispR.at<cv::Vec4i>(r, c), dispL.at<cv::Vec4i>(r, r2l));
-			}
-		}
-	}
-}
-
-
-void Census(const std::string inputDir, const std::string outputDir, const Options& options)
-{
-
-	Mat imL = imread(inputDir + "/img_0.png", IMREAD_COLOR);
-	Mat imR = imread(inputDir + "/img_1.png", IMREAD_COLOR);
-	Mat imgL = imread(inputDir + "/img_0.png", IMREAD_GRAYSCALE);
-	Mat imgR = imread(inputDir + "/img_1.png", IMREAD_GRAYSCALE);
-	Mat dispGT, nonocc;
-	
-
-	float maxdisp = (float)options.ndisp - 1;
+	float maxdisp = (float)calib.ndisp - 1;
 	float errorThresh = 1.0f;
+	if (cvutils::contains(inputDir, "trainingQ") || cvutils::contains(inputDir, "testQ"))
+		errorThresh = errorThresh / 2.0f;
+	else if (cvutils::contains(inputDir, "trainingF") || cvutils::contains(inputDir, "testF"))
+		errorThresh = errorThresh * 2.0f;
 
 	Parameters param = paramsGF;
 	param.windR = options.filterRadious;
 	param.lambda = options.smooth_weight;
 	param.th_col = options.mc_threshold; // tau_CNN in the paper
 
-	int sizes[] = { options.ndisp, imL.rows, imL.cols };
-	int picsize[] = { imL.rows, imL.cols };
+	int sizes[] = { calib.ndisp, imL.rows, imL.cols };
 	cv::Mat volL = cv::Mat_<float>(3, sizes);
+	if (cvutils::io::loadMatBinary(inputDir + "im0.acrt", volL, false) == false) {
+		printf("Cost volume file im0.acrt not found\n");
+		return;
+	}
+	int interp_margin = 0; // Disabled as the use of margin worsens the results...
+	fillOutOfView(volL, 0, interp_margin);
+
+#if 1
 	cv::Mat volR = cv::Mat_<float>(3, sizes);
+	if (cvutils::io::loadMatBinary(inputDir + "im1.acrt", volR, false) == false) {
+		printf("Cost volume file im1.acrt not found so recovered from im0.acrt.\n");
+		volR = convertVolumeL2R(volL, interp_margin);
+	}
+	fillOutOfView(volR, 1, interp_margin);
+#else
+	// This way we can save the file space for im1.acrt.
+	// To exactly recover volR from volL, we need to run MC-CNN without using "fixborder" func.
+	// Plan to make cost volume files again in future...
+	cv::Mat volR = convertVolumeL2R(volL, interp_margin);
+#endif
 
-	auto tic = std::chrono::high_resolution_clock::now();
-	cv::Mat censusImageLeft, censusImageRight;
-	censusImageLeft.create(imL.rows, imL.cols, CV_32SC4);
-	censusImageRight.create(imL.rows, imL.cols, CV_32SC4);
-	censusTransform(imgL, imgR, 9, censusImageLeft, censusImageRight, imL.rows, imL.cols);
 
-	build_cost_volume(censusImageLeft, censusImageRight, volL, volR, options.ndisp, imL.rows, imL.cols);
 	{
-		_mkdir((outputDir + "census_debug").c_str());
+		_mkdir((outputDir + "debug").c_str());
+
+		Evaluator *eval = new Evaluator(dispGT, nonocc, 255.0f / (maxdisp), "result", outputDir + "debug\\");
+		eval->setPrecision(-1);
+		eval->showProgress = false;
+		eval->setErrorThreshold(errorThresh);
+
 		FastGCStereo stereo(imL, imR, param, maxdisp);
 		stereo.setStereoEnergyCPU(std::make_unique<CostVolumeEnergy>(imL, imR, volL, volR, param, maxdisp));
-		stereo.saveDir = outputDir + "census_debug\\";
+		stereo.saveDir = outputDir + "debug\\";
+		//stereo.setEvaluator(eval);
+
 		int w = imL.cols;
 		IProposer* prop1 = new ExpansionProposer(1);
 		IProposer* prop2 = new RandomProposer(7, maxdisp);
@@ -371,21 +407,16 @@ void Census(const std::string inputDir, const std::string outputDir, const Optio
 		delete prop3;
 		delete prop4;
 
-		auto toc = std::chrono::high_resolution_clock::now();
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(toc - tic);
-		cvutils::io::save_pfm_file(outputDir + "disp_census.pfm", stereo.getEnergyInstance().computeDisparities(labeling));
-		if (options.doDual)
-			cvutils::io::save_pfm_file(outputDir + "disp_census_dual.pfm", stereo.getEnergyInstance().computeDisparities(rawdisp));
+		cvutils::io::save_pfm_file(outputDir + "disp0.pfm", stereo.getEnergyInstance().computeDisparities(labeling));
+		if(options.doDual) 
+			cvutils::io::save_pfm_file(outputDir + "disp0raw.pfm", stereo.getEnergyInstance().computeDisparities(rawdisp));
 
 		{
-			FILE* fp = fopen((outputDir + "census_time.txt").c_str(), "w");
-			if (fp != nullptr) {
-				fprintf(fp, "%d ms\n", duration.count());
-				fclose(fp);
-			}
+			FILE *fp = fopen((outputDir + "time.txt").c_str(), "w");
+			if (fp != nullptr){ fprintf(fp, "%lf\n", eval->getCurrentTime()); fclose(fp); }
 		}
 
-		//delete eval;
+		delete eval;
 	}
 }
 
@@ -397,13 +428,23 @@ int main(int argc, const char** args)
 	Options options;
 	options.loadOptionValues(parser);
 	unsigned int seed = (unsigned int)time(NULL);
+#if 0
+	// For debugging
+	//  1  99.4        262247  252693  9554    10.51   8.54
+	options.targetDir = "../data/MiddV3/trainingH/Adirondack";
+	options.outputDir = "../results/Adirondack";
+	options.mode = "MiddV3";
+	options.smooth_weight = 0.5;
+	options.pmIterations = 2;
+	//options.threadNum = 1;
+	seed = 0;
+#endif
 	options.printOptionValues();
-	FILE* foptions = fopen((options.outputDir + "/options.txt").c_str(), "w");
-	options.printOptionValues(foptions);
-	fclose(foptions);
-
+	FILE *fp = fopen((options.outputDir + "options.txt").c_str(), "w");
+	options.printOptionValues(fp);
+	fclose(fp);
 	int nThread = omp_get_max_threads();
-#pragma omp parallel for
+	#pragma omp parallel for
 	for (int j = 0; j < nThread; j++)
 	{
 		srand(seed + j);
@@ -417,26 +458,22 @@ int main(int argc, const char** args)
 		_mkdir((options.outputDir).c_str());
 
 	printf("\n\n");
-	for (int i = 1; i < 65536; i++) {
-		num1[i] = num1[i >> 1] + (i & 1);
-	}
+
 	if (options.mode == "MiddV2")
 	{
 		printf("Running by Middlebury V2 mode.\n");
 		MidV2(options.targetDir + "/", options.outputDir + "/", options);
 	}
-	else if (options.mode == "Census")
+	else if (options.mode == "MiddV3")
 	{
-		printf("Running by Census mode.\n");
-		string inputDir = options.targetDir;
-		string outputDir = options.outputDir;
-		Census(inputDir + "/", outputDir + "/", options);
+		printf("Running by Middlebury V3 mode.\n");
+		printf("This mode assumes MC-CNN matching cost files (im0.acrt, im1.acrt) in targetDir.\n");
+		MidV3(options.targetDir + "/", options.outputDir + "/", options);
 	}
-
 	else
 	{
 		printf("Specify the following arguments:\n");
-		printf("  -mode [MiddV2, Census]\n");
+		printf("  -mode [MiddV2, MiddV3]\n");
 		printf("  -targetDir [PATH_TO_IMAGE_DIR]\n");
 		printf("  -outputDir [PATH_TO_OUTPUT_DIR]\n");
 	}
@@ -455,7 +492,7 @@ set resultsroot=%~dp0results
 mkdir "%resultsroot%"
 "%bin%" -targetDir "%datasetroot%\MiddV2\cones" -outputDir "%resultsroot%\cones" -mode MiddV2 -smooth_weight 1 -doDual 1
 "%bin%" -targetDir "%datasetroot%\MiddV2\teddy" -outputDir "%resultsroot%\teddy" -mode MiddV2 -smooth_weight 1
-"%bin%" -targetDir "%da tasetroot%\MiddV3\Adirondack" -outputDir "%resultsroot%\Adirondack" -mode MiddV3 -smooth_weight 0.5
+"%bin%" -targetDir "%datasetroot%\MiddV3\Adirondack" -outputDir "%resultsroot%\Adirondack" -mode MiddV3 -smooth_weight 0.5
 
 
 */
