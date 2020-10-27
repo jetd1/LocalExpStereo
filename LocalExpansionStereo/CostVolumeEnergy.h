@@ -1,7 +1,14 @@
 #pragma once
+#include "math.h"
 #include "StereoEnergy.h"
 #include "GuidedFilter.h"
 #include "Plane.h"
+
+template <typename T>
+inline bool isnan(T x) { return std::isnan(x); }
+
+template <typename T>
+inline bool isinf(T x) { return std::isinf(x); }
 
 class CostVolumeEnergy :
 	public StereoEnergy
@@ -52,7 +59,7 @@ public:
 	}
 
 
-	void ComputeUnaryPotentialWithoutCheck(const cv::Rect& filterRect, const cv::Rect& targetRect, const cv::Mat& costs, const Plane& plane, Reusable& reusable = Reusable(), int mode = 0) const override
+	void ComputeUnaryPotentialWithoutCheck(const cv::Rect& filterRect, const cv::Rect& targetRect, const cv::Mat& costs, const Plane& plane, Reusable& reusable, int mode = 0) const override
 	{
 		if (reusable.pIL.empty())
 		{
@@ -173,7 +180,7 @@ public:
 			reusable.pIL(subrect).copyTo(costs(subrect));
 	}
 
-	void ComputeUnaryPotential(const cv::Rect& filterRect, const cv::Rect& targetRect, const cv::Mat& costs, const Plane& plane, Reusable& reusable = Reusable(), int mode = 0) const override
+	void ComputeUnaryPotential(const cv::Rect& filterRect, const cv::Rect& targetRect, const cv::Mat& costs, const Plane& plane, Reusable& reusable, int mode = 0) const override
 	{
 		ComputeUnaryPotentialWithoutCheck(filterRect, targetRect, costs, plane, reusable, mode);
 

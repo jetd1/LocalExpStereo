@@ -24,7 +24,7 @@ public:
 	};
 	std::vector<Layer> layers;
 
-	LayerManager& LayerManager::operator=(const LayerManager& obj) {
+	LayerManager& operator=(const LayerManager& obj) {
 		this->layers = obj.layers;
 		return *this;
 	}

@@ -84,7 +84,7 @@ public:
 
 protected:
 
-	void viewConsistencyCheck(cv::Mat& check0 = cv::Mat(), cv::Mat& check1 = cv::Mat())
+	void viewConsistencyCheck(cv::Mat& check0, cv::Mat& check1)
 	{
 		cv::Mat disp[2] = { stereoEnergy->computeDisparities(currentLabeling_[0]), stereoEnergy->computeDisparities(currentLabeling_[1]) };
 		cv::Mat fail[2];

@@ -29,15 +29,6 @@ class ArgsParser
 	{
 		return (T)std::stod(str);
 	}
-	template <> float convertStringToValue(std::string str) const{ return std::stof(str); }
-	template <> int convertStringToValue(std::string str) const{ return std::stoi(str); }
-	template <> std::string convertStringToValue(std::string str)const { return str; }
-	template <> bool convertStringToValue(std::string str) const
-	{
-		if (str == "true") return true;
-		if (str == "false") return false;
-		return convertStringToValue<int>(str) != 0;
-	}
 
 public:
 	ArgsParser(){}
@@ -65,3 +56,13 @@ public:
 		return true;
 	}
 };
+
+template <> float ArgsParser::convertStringToValue(std::string str) const{ return std::stof(str); }
+template <> int ArgsParser::convertStringToValue(std::string str) const{ return std::stoi(str); }
+template <> std::string ArgsParser::convertStringToValue(std::string str)const { return str; }
+template <> bool ArgsParser::convertStringToValue(std::string str) const
+{
+    if (str == "true") return true;
+    if (str == "false") return false;
+    return convertStringToValue<int>(str) != 0;
+}

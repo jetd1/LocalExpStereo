@@ -9,7 +9,6 @@
 #include "ArgsParser.h"
 #include "CostVolumeEnergy.h"
 #include "Utilities.hpp"
-#include <direct.h>
 #include <opencv2/stereo.hpp>
 #include <cstring>
 #include <cstdio>
@@ -38,7 +37,7 @@ struct Options
 		argParser.TryGetArgment("outputDir", outputDir);
 		argParser.TryGetArgment("targetDir", targetDir);
 		argParser.TryGetArgment("mode", mode);
-		printf("%s () %s () %s ==================\n", outputDir, targetDir, mode);
+		printf("%s () %s () %s ==================\n", outputDir.c_str(), targetDir.c_str(), mode.c_str());
 		if (mode == "MiddV2")
 			smooth_weight = 1.0;
 		else if (mode == "Census")
@@ -219,10 +218,10 @@ void MidV2(const std::string inputDir, const std::string outputDir, const Option
 	param.lambda = options.smooth_weight;
 
 	{
-		_mkdir((outputDir + "midv2_debug").c_str());
+		mkdir((outputDir + "midv2_debug").c_str(), 0777);
 		auto tic = std::chrono::high_resolution_clock::now();
 		FastGCStereo stereo(imL, imR, param, maxdisp, 0, vdisp);
-		stereo.saveDir = outputDir + "midv2_debug\\";
+		stereo.saveDir = outputDir + "midv2_debug/";
 
 		IProposer* prop1 = new ExpansionProposer(1);
 		IProposer* prop2 = new RandomProposer(7, maxdisp);
@@ -254,7 +253,7 @@ void MidV2(const std::string inputDir, const std::string outputDir, const Option
 			FILE *fp = fopen((outputDir + "midv2_time.txt").c_str(), "w");
 			if (fp != nullptr)
 			{ 
-				fprintf(fp, "%d ms\n", duration.count());
+				fprintf(fp, "%ld ms\n", duration.count());
 				fclose(fp);
 			}
 		}
@@ -349,8 +348,8 @@ void Census(const std::string inputDir, const std::string outputDir, const Optio
 	{
 		_mkdir((outputDir + "census_debug").c_str());
 		FastGCStereo stereo(imL, imR, param, maxdisp);
-		stereo.setStereoEnergyCPU(std::make_unique<CostVolumeEnergy>(imL, imR, volL, volR, param, maxdisp));
-		stereo.saveDir = outputDir + "census_debug\\";
+        stereo.setStereoEnergyCPU(std::make_unique<CostVolumeEnergy>(imL, imR, volL, volR, param, maxdisp));
+		stereo.saveDir = outputDir + "census_debug/";
 		int w = imL.cols;
 		IProposer* prop1 = new ExpansionProposer(1);
 		IProposer* prop2 = new RandomProposer(7, maxdisp);
@@ -380,7 +379,7 @@ void Census(const std::string inputDir, const std::string outputDir, const Optio
 		{
 			FILE* fp = fopen((outputDir + "census_time.txt").c_str(), "w");
 			if (fp != nullptr) {
-				fprintf(fp, "%d ms\n", duration.count());
+				fprintf(fp, "%ld ms\n", duration.count());
 				fclose(fp);
 			}
 		}
