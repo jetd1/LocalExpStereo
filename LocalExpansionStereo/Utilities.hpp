@@ -6,8 +6,29 @@
 
 typedef __int32_t __int32;
 
-inline int _mkdir(const char *__path) {
-    return mkdir(__path, 0777);
+struct stat sb;
+
+inline bool exists(const char *__restrict __path) {
+    return stat(__path, &sb) == 0;
+}
+
+inline void _mkdir(const char *__restrict __path) {
+    char tmp[256];
+    char *p = NULL;
+    size_t len;
+
+    snprintf(tmp, sizeof(tmp),"%s", __path);
+    len = strlen(tmp);
+    if(tmp[len - 1] == '/')
+        tmp[len - 1] = 0;
+
+    for(p = tmp + 1; *p; p++)
+        if(*p == '/') {
+            *p = 0;
+            mkdir(tmp, 0777);
+            *p = '/';
+        }
+    mkdir(tmp, 0777);
 }
 
 inline void fopen_s(FILE *__restrict *__restrict f,

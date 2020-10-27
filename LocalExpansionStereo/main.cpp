@@ -14,7 +14,7 @@
 #include <cstdio>
 #include <algorithm>
 #include <iostream>
-#include <chrono> 
+#include <chrono>
 using namespace std;
 using namespace cv;
 struct Options
@@ -397,6 +397,17 @@ int main(int argc, const char** args)
 	options.loadOptionValues(parser);
 	unsigned int seed = (unsigned int)time(NULL);
 	options.printOptionValues();
+
+	if (!exists(options.targetDir.c_str())) {
+	    printf("Invalid target dir!\n");
+	    exit(-1);
+	}
+
+	if (!exists(options.outputDir.c_str())) {
+        printf("Output dir does not exist, creating...\n");
+        _mkdir(options.outputDir.c_str());
+	}
+
 	FILE* foptions = fopen((options.outputDir + "/options.txt").c_str(), "w");
 	options.printOptionValues(foptions);
 	fclose(foptions);

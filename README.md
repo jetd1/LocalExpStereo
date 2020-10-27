@@ -1,5 +1,13 @@
 # Continuous 3D Label Stereo Matching using Local Expansion Moves
 
+## Build on linux
+
+```bash
+mkdir build && cd build && cmake .. && make
+./stereo_match -targetDir TARGET_DIR -outputDir OUTPUT_DIR -mode {Census, MiddV2} -ndisp NDISP -threadNum NTHREAD
+```
+That's it!
+
 ![Local Expansion Moves](teaser.png)
 
 This is an implementatioin of a stereo matching method described in
