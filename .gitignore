@@ -1,8 +1,3 @@
-maxflow/maxflow.cpp
-maxflow/instances.inc
-maxflow/graph.h
-maxflow/graph.cpp
-maxflow/block.h
 packages/
 x64/Release/LocalExpansionStereo.ipdb
 x64/Release/LocalExpansionStereo.iobj
