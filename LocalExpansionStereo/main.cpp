@@ -218,7 +218,7 @@ void MidV2(const std::string inputDir, const std::string outputDir, const Option
 	param.lambda = options.smooth_weight;
 
 	{
-		mkdir((outputDir + "midv2_debug").c_str(), 0777);
+		_mkdir((outputDir + "midv2_debug").c_str());
 		auto tic = std::chrono::high_resolution_clock::now();
 		FastGCStereo stereo(imL, imR, param, maxdisp, 0, vdisp);
 		stereo.saveDir = outputDir + "midv2_debug/";

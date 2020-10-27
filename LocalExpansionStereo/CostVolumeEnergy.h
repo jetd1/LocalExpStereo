@@ -1,5 +1,4 @@
 #pragma once
-#include "math.h"
 #include "StereoEnergy.h"
 #include "GuidedFilter.h"
 #include "Plane.h"
