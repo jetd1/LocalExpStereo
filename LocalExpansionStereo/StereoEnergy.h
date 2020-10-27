@@ -226,18 +226,18 @@ public:
 	{
 		cv::Point pt = ps + neighbors[neighborId];
 		return smoothnessCoeff[mode][neighborId].at<float>(ps + cv::Point(M, M))
-			* std::min(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth) * params.lambda;
+			* std::min<double>(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth) * params.lambda;
 	}
 
 	float computeSmoothnessTerm(const Plane& ls, const Plane& lt, cv::Point ps, cv::Point pt, int mode = 0) const
 	{
 		return std::max(computePatchWeight(ps, pt, mode), params.epsilon)
-			* std::min(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth) * params.lambda;
+			* std::min<double>(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth) * params.lambda;
 	}
 
 	float computeSmoothnessTermWithoutConst(const Plane& ls, const Plane& lt, cv::Point ps, cv::Point pt) const
 	{
-		return std::min(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth);
+		return std::min<double>(fabs(ls.GetZ(ps) - lt.GetZ(ps)) + fabs(ls.GetZ(pt) - lt.GetZ(pt)), params.th_smooth);
 	}
 
 	float computeSmoothnessTermConst(cv::Point ps, cv::Point pt, int mode = 0) const
@@ -736,8 +736,8 @@ public:
 			auto& I0 = reusable.pIL.at<IVec>(y, x);
 			auto& I1 = reusable.pIR.at<IVec>(y, x);
 			rawCosts.at<float>(y, x) =
-				std::min(thresh_color, fabs(I0.val[0] - I1.val[0]) + fabs(I0.val[1] - I1.val[1]) + fabs(I0.val[2] - I1.val[2])) +
-				std::min(thresh_gradient, fabs(I0.val[3] - I1.val[3]));
+				std::min<double>(thresh_color, fabs(I0.val[0] - I1.val[0]) + fabs(I0.val[1] - I1.val[1]) + fabs(I0.val[2] - I1.val[2])) +
+				std::min<double>(thresh_gradient, fabs(I0.val[3] - I1.val[3]));
 		}
 
 		cv::Rect subrect = targetRect - filterRect.tl();
